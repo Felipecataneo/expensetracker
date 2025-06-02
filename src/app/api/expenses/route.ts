@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { Expense, ManualExpenseInput } from '@/lib/types';
 
-const API_GATEWAY_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL; // URL do seu API Gateway
+const API_GATEWAY_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
 
 export async function GET() {
   if (!API_GATEWAY_URL) {
@@ -15,16 +15,23 @@ export async function GET() {
       headers: {
         'Content-Type': 'application/json',
       },
-      // cache: 'no-store' // Para garantir que os dados sejam sempre atualizados
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Failed to fetch expenses: ${errorData.message || response.statusText}`);
+      throw new Error(`API Gateway returned HTTP error ${response.status}: ${response.statusText}`);
     }
 
+    // Com Lambda Proxy Integration ativada, a resposta já vem processada
     const expenses: Expense[] = await response.json();
+    
+    // Verificar se é um array válido
+    if (!Array.isArray(expenses)) {
+      console.error('Expected array but received:', expenses);
+      throw new Error('Invalid data format received from API');
+    }
+    
     return NextResponse.json(expenses);
+
   } catch (error: any) {
     console.error('Error fetching expenses:', error);
     return NextResponse.json({ error: error.message || 'Failed to fetch expenses' }, { status: 500 });
@@ -48,12 +55,15 @@ export async function POST(req: Request) {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Failed to add expense: ${errorData.message || response.statusText}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`API Gateway returned HTTP error ${response.status}: ${errorData.message || response.statusText}`);
     }
 
+    // Com Lambda Proxy Integration ativada, a resposta já vem processada
     const result = await response.json();
+
     return NextResponse.json(result, { status: 201 });
+    
   } catch (error: any) {
     console.error('Error adding expense manually:', error);
     return NextResponse.json({ error: error.message || 'Failed to add expense manually' }, { status: 500 });
