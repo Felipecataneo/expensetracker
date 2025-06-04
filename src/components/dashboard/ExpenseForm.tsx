@@ -6,6 +6,7 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
+import { getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,9 +15,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, PlusCircle, MinusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ManualExpenseInput } from '@/lib/types';
 import { toast } from 'sonner';
-
+import { ManualExpenseInput } from '@/lib/types';
 
 // Esquema de validação com Zod
 const formSchema = z.object({
@@ -47,7 +47,8 @@ interface ExpenseFormProps {
 }
 
 export function ExpenseForm({ onManualExpenseSuccess }: ExpenseFormProps) {
-  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -64,59 +65,73 @@ export function ExpenseForm({ onManualExpenseSuccess }: ExpenseFormProps) {
   });
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    const expenseData: ManualExpenseInput = {
-      ...values,
-      date: format(values.date, 'yyyy-MM-dd'),
-      total: parseFloat(values.total).toFixed(2), // Garante 2 casas decimais
-      items: values.items.map(item => ({
-        ...item,
-        price: parseFloat(item.price).toFixed(2),
-        quantity: parseInt(item.quantity).toString(), // Garante que é string de inteiro
-      })),
-    };
+    setIsSubmitting(true);
+    
     try {
-    const response = await fetch('/api/expenses', {
+      // Verificar se o usuário está autenticado
+      const user = await getCurrentUser();
+      
+      if (!user) {
+        toast.error('Por favor, faça login para adicionar despesas.');
+        return;
+      }
+
+      // Obter a sessão e o token JWT
+      const session = await fetchAuthSession();
+      const token = session.tokens?.idToken?.toString();
+
+      if (!token) {
+        toast.error('Não foi possível obter o token de autenticação.');
+        return;
+      }
+
+      const expenseData: ManualExpenseInput = {
+        ...values,
+        date: format(values.date, 'yyyy-MM-dd'),
+        total: parseFloat(values.total).toFixed(2),
+        items: values.items.map(item => ({
+          ...item,
+          price: parseFloat(item.price).toFixed(2),
+          quantity: parseInt(item.quantity).toString(),
+        })),
+      };
+
+      const response = await fetch('/api/expenses', {
         method: 'POST',
         headers: {
-        'Content-Type': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(expenseData),
-    });
+      });
 
-    if (!response.ok) {
+      if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Falha ao adicionar despesa manualmente.');
-    }
+      }
 
-    toast('Despesa adicionada!', {
-        description: 'A despesa foi registrada com sucesso.',
-        action: {
-        label: 'Desfazer',
-        onClick: () => {
-            // ação de desfazer (se quiser implementar)
-            console.log('Desfazer ação de despesa');
-        },
-        },
-    });
-
-    form.reset();
-    onManualExpenseSuccess();
+      toast.success('A despesa foi registrada com sucesso.');
+      form.reset();
+      onManualExpenseSuccess();
     } catch (error: any) {
-    console.error('Erro ao adicionar despesa:', error);
-    toast('Erro ao adicionar despesa', {
-        description: error.message || 'Não foi possível adicionar a despesa.',
-        className: 'bg-red-500 text-white', // ou use `variant: "destructive"` se tiver estilização para isso
-    });
+      console.error('Erro ao adicionar despesa:', error);
+      
+      // Tratamento específico para erros de autenticação
+      if (error.name === 'UserUnAuthenticatedException' || error.name === 'NotAuthorizedException') {
+        toast.error('Sessão expirada. Por favor, faça login novamente.');
+      } else {
+        toast.error(error.message || 'Não foi possível adicionar a despesa.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-}
-
-
-
+  };
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
       <h3 className="text-lg font-medium">Digitar Despesa Manualmente</h3>
 
+      {/* Data */}
       <div className="grid gap-2">
         <Label htmlFor="date">Data</Label>
         <Controller
@@ -152,6 +167,7 @@ export function ExpenseForm({ onManualExpenseSuccess }: ExpenseFormProps) {
         )}
       </div>
 
+      {/* Vendedor */}
       <div className="grid gap-2">
         <Label htmlFor="vendor">Vendedor</Label>
         <Input id="vendor" {...form.register('vendor')} />
@@ -160,6 +176,7 @@ export function ExpenseForm({ onManualExpenseSuccess }: ExpenseFormProps) {
         )}
       </div>
 
+      {/* Total */}
       <div className="grid gap-2">
         <Label htmlFor="total">Total</Label>
         <Input id="total" type="text" {...form.register('total')} placeholder="0.00" />
@@ -207,8 +224,8 @@ export function ExpenseForm({ onManualExpenseSuccess }: ExpenseFormProps) {
         <p className="text-sm text-red-500">{form.formState.errors.items.message}</p>
       )}
 
-      <Button type="submit" disabled={form.formState.isSubmitting}>
-        {form.formState.isSubmitting ? 'Salvando...' : 'Salvar Despesa'}
+      <Button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? 'Salvando...' : 'Salvar Despesa'}
       </Button>
     </form>
   );

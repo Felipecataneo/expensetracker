@@ -1,11 +1,13 @@
 // src/components/dashboard/ReceiptUpload.tsx
 'use client';
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { toast } from 'sonner'; // substituindo useToast
+import { toast } from 'sonner';
+import { useAuth } from '@/components/providers/AuthProvider';
+import { fetchAuthSession } from 'aws-amplify/auth';
+import { getCurrentUser } from 'aws-amplify/auth';
 
 interface ReceiptUploadProps {
   onUploadSuccess: () => void;
@@ -14,6 +16,7 @@ interface ReceiptUploadProps {
 export function ReceiptUpload({ onUploadSuccess }: ReceiptUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const { user, isAuthenticated } = useAuth();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -31,56 +34,82 @@ export function ReceiptUpload({ onUploadSuccess }: ReceiptUploadProps) {
       return;
     }
 
+    if (!isAuthenticated || !user) {
+      toast.error('Não autenticado', {
+        description: 'Por favor, faça login para enviar recibos.',
+      });
+      return;
+    }
+
     setLoading(true);
+    
     try {
-      // 1. Obter URL pré-assinada do backend para o upload do arquivo
+      // Obter sessão usando Amplify v6
+      const session = await fetchAuthSession();
+      
+      if (!session.tokens?.idToken) {
+        throw new Error('Token de autenticação não encontrado');
+      }
+
+      const token = session.tokens.idToken.toString();
+
+      // Obter dados do usuário atual usando Amplify v6
+      const currentUser = await getCurrentUser();
+      const userId = currentUser.userId; // No v6, use userId em vez de attributes.sub
+
+      // 1. Obter URL pré-assinada do nosso API Route
       const response = await fetch('/api/s3-upload', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
-        // Enviar fileName, fileType e fileSize para validação no backend
-        body: JSON.stringify({ fileName: file.name, fileType: file.type, fileSize: file.size }),
+        body: JSON.stringify({ 
+          fileName: file.name, 
+          fileType: file.type, 
+          userId: userId 
+        }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Falha ao obter URL de upload.');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Erro HTTP: ${response.status}`);
       }
 
       const { url, key } = await response.json();
       console.log('Got pre-signed URL for S3:', url);
 
-      // 2. Fazer o upload do arquivo diretamente para o S3 usando a URL pré-assinada
-      await fetch(url, {
+      // 2. Fazer upload do arquivo diretamente para o S3
+      const uploadResponse = await fetch(url, {
         method: 'PUT',
         headers: {
           'Content-Type': file.type,
-          // Dependendo da sua configuração S3, você pode precisar de 'x-amz-acl': 'public-read'
-          // Mas geralmente é melhor controlar permissões via políticas de bucket/IAM e evitar ACLs públicas
         },
         body: file,
       });
 
-      // 3. Informar o usuário sobre o sucesso do upload e o processamento assíncrono
-      toast.success('Recibo enviado com sucesso!', {
-        description: `O recibo "${file.name}" foi enviado e está sendo processado. Ele aparecerá em breve na lista de despesas.`,
-        duration: 5000, // Manter o toast visível por mais tempo para o usuário ler
+      if (!uploadResponse.ok) {
+        throw new Error('Falha no upload para S3');
+      }
+
+      toast.success('Upload de recibo sucesso!', {
+        description: `O recibo "${file.name}" foi enviado e está sendo processado.`,
       });
 
-      setFile(null); // Limpar o input do arquivo
+      // Limpar o estado
+      setFile(null);
+      
+      // Reset do input file
+      const fileInput = document.getElementById('receipt') as HTMLInputElement;
+      if (fileInput) {
+        fileInput.value = '';
+      }
 
-      // 4. Adicionar um pequeno atraso antes de fechar o modal e refazer o fetch de despesas.
-      // Isso dá ao fluxo S3 -> Lambda (Textract) -> DynamoDB um tempo para ser concluído.
-      // É uma heurística, não garante a conclusão, mas melhora a UX.
-      setTimeout(() => {
-        onUploadSuccess(); // Chama o callback para fechar o modal e refazer o fetch no componente pai
-      }, 3000); // Atraso de 3 segundos
-
+      onUploadSuccess();
     } catch (error: any) {
       console.error('Erro ao fazer upload:', error);
       toast.error('Erro no upload', {
-        description: error.message || 'Não foi possível fazer o upload do recibo. Por favor, tente novamente.',
+        description: error.message || 'Não foi possível fazer o upload do recibo.',
       });
     } finally {
       setLoading(false);
@@ -92,14 +121,25 @@ export function ReceiptUpload({ onUploadSuccess }: ReceiptUploadProps) {
       <h3 className="text-lg font-medium">Anexar Recibo</h3>
       <div className="grid w-full max-w-sm items-center gap-1.5">
         <Label htmlFor="receipt">Recibo (imagem ou PDF)</Label>
-        <Input id="receipt" type="file" accept="image/*,application/pdf" onChange={handleFileChange} />
+        <Input 
+          id="receipt" 
+          type="file" 
+          accept="image/*,application/pdf" 
+          onChange={handleFileChange}
+          disabled={loading || !isAuthenticated}
+        />
       </div>
       {file && (
-        <p className="text-sm text-muted-foreground">
-          Arquivo selecionado: {file.name} ({Math.round(file.size / 1024)} KB)
-        </p>
+        <div className="text-sm text-muted-foreground space-y-1">
+          <p>Arquivo selecionado: {file.name}</p>
+          <p>Tamanho: {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+        </div>
       )}
-      <Button onClick={handleUpload} disabled={!file || loading}>
+      <Button 
+        onClick={handleUpload} 
+        disabled={!file || loading || !isAuthenticated}
+        className="w-full sm:w-auto"
+      >
         {loading ? 'Enviando...' : 'Enviar Recibo'}
       </Button>
     </div>

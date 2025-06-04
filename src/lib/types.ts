@@ -18,6 +18,7 @@ export interface Expense {
 export interface UploadPresignedUrlResponse {
   url: string;
   key: string;
+  userId: string;
 }
 
 export interface ManualExpenseInput {

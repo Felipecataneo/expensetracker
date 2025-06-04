@@ -2,13 +2,15 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import { cn } from '@/lib/utils'; // Import para usar a função cn do Shadcn/UI
+import { cn } from '@/lib/utils';
+import { AuthProvider } from '@/components/providers/AuthProvider'; // <-- Importar
+import { Toaster } from "@/components/ui/sonner"// Para os toasts do Shadcn
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
 export const metadata: Metadata = {
-  title: 'Expense Tracker',
-  description: 'Track your expenses easily.',
+  title: 'Despesas da Casa',
+  description: 'Registre e gerencie suas despesas domésticas de forma simples e eficiente.',
 };
 
 export default function RootLayout({
@@ -24,7 +26,10 @@ export default function RootLayout({
           inter.variable
         )}
       >
-        {children}
+        <AuthProvider> {/* <-- Envolver com AuthProvider */}
+          {children}
+        </AuthProvider>
+        <Toaster /> {/* O Toaster deve estar fora do AuthProvider se o AuthProvider puder ser redirecionado */}
       </body>
     </html>
   );
