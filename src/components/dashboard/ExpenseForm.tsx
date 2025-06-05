@@ -1,11 +1,11 @@
 // src/components/dashboard/ExpenseForm.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Import useEffect
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { format } from 'date-fns';
+import { format, formatISO, parseISO } from 'date-fns'; // Import formatISO, parseISO
 import { getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
 
 import { Input } from '@/components/ui/input';
@@ -16,7 +16,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarIcon, PlusCircle, MinusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { ManualExpenseInput } from '@/lib/types';
+import { ManualExpenseInput, Expense } from '@/lib/types'; // Import Expense
+import { useExpenses } from '@/hooks/useExpenses'; // Import useExpenses
 
 // Esquema de validação com Zod
 const formSchema = z.object({
@@ -44,20 +45,50 @@ const formSchema = z.object({
 
 interface ExpenseFormProps {
   onManualExpenseSuccess: () => void;
+  expenseToEdit?: Expense; // Nova prop para editar despesas
 }
 
-export function ExpenseForm({ onManualExpenseSuccess }: ExpenseFormProps) {
+export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { updateExpense } = useExpenses(); // Obter updateExpense do hook
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      date: new Date(),
-      vendor: '',
-      total: '0.00',
-      items: [{ name: '', price: '', quantity: '1' }],
+      date: expenseToEdit ? parseISO(expenseToEdit.date) : new Date(), // Preenche com data da despesa ou data atual
+      vendor: expenseToEdit?.vendor || '',
+      total: expenseToEdit?.total || '0.00',
+      items: expenseToEdit?.items?.map(item => ({
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+      })) || [{ name: '', price: '', quantity: '1' }],
     },
   });
+
+  // Resetar o formulário quando expenseToEdit mudar (útil ao abrir modal de edição para despesas diferentes)
+  useEffect(() => {
+    if (expenseToEdit) {
+      form.reset({
+        date: parseISO(expenseToEdit.date),
+        vendor: expenseToEdit.vendor,
+        total: expenseToEdit.total,
+        items: expenseToEdit.items.map(item => ({
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+        })),
+      });
+    } else {
+      // Resetar para valores padrão se não estiver editando
+      form.reset({
+        date: new Date(),
+        vendor: '',
+        total: '0.00',
+        items: [{ name: '', price: '', quantity: '1' }],
+      });
+    }
+  }, [expenseToEdit, form]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -68,18 +99,14 @@ export function ExpenseForm({ onManualExpenseSuccess }: ExpenseFormProps) {
     setIsSubmitting(true);
     
     try {
-      // Verificar se o usuário está autenticado
       const user = await getCurrentUser();
-      
       if (!user) {
-        toast.error('Por favor, faça login para adicionar despesas.');
+        toast.error('Por favor, faça login para adicionar/atualizar despesas.');
         return;
       }
 
-      // Obter a sessão e o token JWT
       const session = await fetchAuthSession();
       const token = session.tokens?.idToken?.toString();
-
       if (!token) {
         toast.error('Não foi possível obter o token de autenticação.');
         return;
@@ -87,7 +114,7 @@ export function ExpenseForm({ onManualExpenseSuccess }: ExpenseFormProps) {
 
       const expenseData: ManualExpenseInput = {
         ...values,
-        date: format(values.date, 'yyyy-MM-dd'),
+        date: formatISO(values.date, { representation: 'date' }), // Alterado: Para evitar problemas de fuso horário
         total: parseFloat(values.total).toFixed(2),
         items: values.items.map(item => ({
           ...item,
@@ -96,31 +123,36 @@ export function ExpenseForm({ onManualExpenseSuccess }: ExpenseFormProps) {
         })),
       };
 
-      const response = await fetch('/api/expenses', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(expenseData),
-      });
+      if (expenseToEdit) {
+        // Lógica para EDITAR despesa existente
+        await updateExpense(expenseToEdit.receipt_id, expenseData);
+        toast.success('Despesa atualizada com sucesso.');
+      } else {
+        // Lógica para ADICIONAR nova despesa
+        const response = await fetch('/api/expenses', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(expenseData),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Falha ao adicionar despesa manualmente.');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Falha ao adicionar despesa manualmente.');
+        }
+        toast.success('A despesa foi registrada com sucesso.');
       }
-
-      toast.success('A despesa foi registrada com sucesso.');
+      
       form.reset();
       onManualExpenseSuccess();
     } catch (error: any) {
-      console.error('Erro ao adicionar despesa:', error);
-      
-      // Tratamento específico para erros de autenticação
+      console.error('Erro ao adicionar/atualizar despesa:', error);
       if (error.name === 'UserUnAuthenticatedException' || error.name === 'NotAuthorizedException') {
         toast.error('Sessão expirada. Por favor, faça login novamente.');
       } else {
-        toast.error(error.message || 'Não foi possível adicionar a despesa.');
+        toast.error(error.message || `Não foi possível ${expenseToEdit ? 'atualizar' : 'adicionar'} a despesa.`);
       }
     } finally {
       setIsSubmitting(false);
@@ -129,7 +161,7 @@ export function ExpenseForm({ onManualExpenseSuccess }: ExpenseFormProps) {
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-      <h3 className="text-lg font-medium">Digitar Despesa Manualmente</h3>
+      <h3 className="text-lg font-medium">{expenseToEdit ? 'Editar Despesa' : 'Digitar Despesa Manualmente'}</h3>
 
       {/* Data */}
       <div className="grid gap-2">
@@ -225,7 +257,7 @@ export function ExpenseForm({ onManualExpenseSuccess }: ExpenseFormProps) {
       )}
 
       <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? 'Salvando...' : 'Salvar Despesa'}
+        {isSubmitting ? 'Salvando...' : (expenseToEdit ? 'Salvar Alterações' : 'Salvar Despesa')}
       </Button>
     </form>
   );

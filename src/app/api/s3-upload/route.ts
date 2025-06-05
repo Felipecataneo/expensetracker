@@ -32,10 +32,11 @@ export async function POST(req: Request) {
     }
 
     const uniqueFileName = `${uuidv4()}-${fileName}`;
+    const keyWithPath = `receipts/${uniqueFileName}`;
 
     const command = new PutObjectCommand({
       Bucket: bucketName,
-      Key: uniqueFileName,
+      Key: keyWithPath,
       ContentType: fileType,
       ACL: 'private',
       Metadata: {
@@ -44,9 +45,14 @@ export async function POST(req: Request) {
       },
     });
 
-    const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+    const url = await getSignedUrl(s3Client, command, { 
+      expiresIn: 3600,
+      // Não incluir checksums ou outras configurações que podem complicar o CORS
+    });
 
-    return NextResponse.json({ url, key: uniqueFileName, userId }); // Retornar userId também para o cliente
+    console.log('Generated pre-signed URL:', url);
+
+    return NextResponse.json({ url, key: keyWithPath, userId });
   } catch (error) {
     console.error('Error generating pre-signed URL:', error);
     return NextResponse.json({ error: 'Failed to generate pre-signed URL' }, { status: 500 });

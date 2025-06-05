@@ -5,19 +5,19 @@ import { Navbar } from '@/components/common/Navbar';
 import { ExpenseList } from '@/components/dashboard/ExpenseList';
 import { MonthlyCharts } from '@/components/dashboard/MonthlyCharts';
 import { AddExpenseDialog } from '@/components/dashboard/AddExpenseDialog';
-import { useExpenses } from '@/hooks/useExpenses';
-import { useAuth } from '@/components/providers/AuthProvider'; // <-- Importar useAuth
+import { useExpenses } from '@/hooks/useExpenses'; // Chame o hook AQUI
+import { useAuth } from '@/components/providers/AuthProvider';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 
 export default function Home() {
-  const { expenses, isLoading, error, refetchExpenses } = useExpenses();
-  const { user, isAuthenticated, loading, signOut } = useAuth(); // <-- Obter dados do Auth
+  // NOVO: Obter deleteExpense e updateExpense do hook
+  const { expenses, isLoading, error, refetchExpenses, deleteExpense, updateExpense } = useExpenses(); 
+  const { user, isAuthenticated, loading, signOut } = useAuth();
 
   const router = useRouter();
 
-  // Redirecionar se não estiver autenticado
   useEffect(() => {
     if (!loading && !isAuthenticated) {
       router.push('/auth');
@@ -47,11 +47,21 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ExpenseList expenses={expenses} isLoading={isLoading} error={error} />
+          {/* 
+            Passa todas as props necessárias para ExpenseList, 
+            incluindo deleteExpense e updateExpense 
+          */}
+          <ExpenseList 
+            expenses={expenses} 
+            isLoading={isLoading} 
+            error={error} 
+            refetchExpenses={refetchExpenses} 
+            deleteExpense={deleteExpense} // NOVO: Passando deleteExpense
+            updateExpense={updateExpense} // NOVO: Passando updateExpense
+          />
           <MonthlyCharts expenses={expenses} />
         </div>
       </main>
-      {/* O Toaster já está no RootLayout */}
     </div>
   );
 }

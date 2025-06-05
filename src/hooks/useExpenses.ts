@@ -1,6 +1,6 @@
 // src/hooks/useExpenses.ts
 import { useState, useEffect, useCallback } from 'react';
-import { Expense } from '@/lib/types';
+import { Expense, ManualExpenseInput } from '@/lib/types'; // Import ManualExpenseInput
 import { toast } from 'sonner';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { fetchAuthSession } from 'aws-amplify/auth';
@@ -21,9 +21,7 @@ export function useExpenses() {
     setError(null);
     
     try {
-      // Método atualizado para obter a sessão no Amplify v6
       const session = await fetchAuthSession();
-      
       if (!session.tokens?.idToken) {
         throw new Error('Token de autenticação não encontrado');
       }
@@ -63,12 +61,87 @@ export function useExpenses() {
     }
   }, [isAuthenticated, authLoading, user]);
 
+  // NOVO: Função para atualizar despesa
+  const updateExpense = useCallback(async (receiptId: string, updatedExpense: ManualExpenseInput) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const session = await fetchAuthSession();
+      if (!session.tokens?.idToken) {
+        throw new Error('Token de autenticação não encontrado');
+      }
+      const token = session.tokens.idToken.toString();
+
+      const response = await fetch(`/api/expenses/${receiptId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updatedExpense),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Erro HTTP: ${response.status}`);
+      }
+
+      toast.success('Despesa atualizada com sucesso!');
+      await fetchExpenses(); // Recarrega todas as despesas para atualizar a lista
+    } catch (err: any) {
+      const errorMessage = err.message || 'Não foi possível atualizar a despesa.';
+      console.error('Erro ao atualizar despesa:', err);
+      setError(errorMessage);
+      toast.error('Erro de Atualização', { description: errorMessage });
+      throw err; // Re-lança para permitir que o componente chame onSuccess/onError
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchExpenses]);
+
+  // NOVO: Função para deletar despesa
+  const deleteExpense = useCallback(async (receiptId: string, date: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const session = await fetchAuthSession();
+      if (!session.tokens?.idToken) {
+        throw new Error('Token de autenticação não encontrado');
+      }
+      const token = session.tokens.idToken.toString();
+
+      const response = await fetch(`/api/expenses/${receiptId}?date=${date}`, { // <-- Adicione ?date=${date}
+        method: 'DELETE',
+        
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ date: date })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Erro HTTP: ${response.status}`);
+      }
+
+      toast.success('Despesa deletada com sucesso!');
+      await fetchExpenses(); // Recarrega todas as despesas para atualizar a lista
+    } catch (err: any) {
+      const errorMessage = err.message || 'Não foi possível deletar a despesa.';
+      console.error('Erro ao deletar despesa:', err);
+      setError(errorMessage);
+      toast.error('Erro ao Deletar', { description: errorMessage });
+      throw err; // Re-lança para permitir que o componente chame onSuccess/onError
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchExpenses]);
+
   useEffect(() => {
-    // Só busca despesas quando estiver autenticado e não estiver carregando
     if (isAuthenticated && user && !authLoading) {
       fetchExpenses();
     } else if (!authLoading && !isAuthenticated) {
-      // Limpa os dados quando não estiver autenticado
       setExpenses([]);
       setIsLoading(false);
       setError(null);
@@ -79,6 +152,8 @@ export function useExpenses() {
     expenses, 
     isLoading, 
     error, 
-    refetchExpenses: fetchExpenses 
+    refetchExpenses: fetchExpenses,
+    updateExpense, // Disponibiliza para outros componentes
+    deleteExpense, // Disponibiliza para outros componentes
   };
 }

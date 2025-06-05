@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const token = req.headers.get('Authorization'); // Obter o token do cabeçalho
+    const token = req.headers.get('Authorization');
     if (!token) {
         return NextResponse.json({ error: 'Authorization token is missing' }, { status: 401 });
     }
@@ -19,9 +19,8 @@ export async function GET(req: Request) {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': token, // <-- Passar o token para o API Gateway
+        'Authorization': token,
       },
-      // cache: 'no-store'
     });
 
     if (!response.ok) {
@@ -43,7 +42,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const token = req.headers.get('Authorization'); // Obter o token do cabeçalho
+    const token = req.headers.get('Authorization');
     if (!token) {
         return NextResponse.json({ error: 'Authorization token is missing' }, { status: 401 });
     }
@@ -54,7 +53,7 @@ export async function POST(req: Request) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': token, // <-- Passar o token para o API Gateway
+        'Authorization': token,
       },
       body: JSON.stringify(manualExpense),
     });

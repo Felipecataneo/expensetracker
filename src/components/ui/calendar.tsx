@@ -1,3 +1,4 @@
+// src/components/ui/calendar.tsx
 "use client"
 
 import * as React from "react"
@@ -67,6 +68,7 @@ function Calendar({
             <ChevronRight className={cn("size-4", className)} {...props} />
           ),
       }}
+      weekStartsOn={0} // Adicionado: Define o domingo como o primeiro dia da semana
       {...props}
     />
   )
