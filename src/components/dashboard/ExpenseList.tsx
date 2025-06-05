@@ -10,18 +10,17 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Trash2Icon } from 'lucide-react';
 import { EditExpenseDialog } from './EditExpenseDialog';
-// REMOVIDO: import { useExpenses } from '@/hooks/useExpenses'; // Este hook não deve ser chamado aqui
+import { formatCurrency } from '@/lib/utils'; // <-- Importar a função de formatação
 
 interface ExpenseListProps {
   expenses: Expense[];
   isLoading: boolean;
   error: string | null;
   refetchExpenses: () => void;
-  // NOVO: Adiciona deleteExpense e updateExpense como props
   deleteExpense: (receiptId: string, date: string) => Promise<void>; 
   updateExpense: (receiptId: string, updatedExpense: any) => Promise<void>; 
 }
@@ -31,15 +30,14 @@ export function ExpenseList({
   isLoading, 
   error, 
   refetchExpenses, 
-  deleteExpense, // Recebido como prop
-  updateExpense // Recebido como prop
+  deleteExpense,
+  updateExpense 
 }: ExpenseListProps) {
-  // REMOVIDO: const { deleteExpense } = useExpenses(); // Não chame o hook aqui!
 
   const handleDelete = async (receiptId: string, date: string, vendor: string) => { 
     if (window.confirm(`Tem certeza que deseja deletar a despesa de "${vendor}"?`)) {
       try {
-        await deleteExpense(receiptId, date); // Usa o deleteExpense recebido via prop
+        await deleteExpense(receiptId, date);
       } catch (err) {
         // Erro já tratado pelo toast no hook
       }
@@ -77,15 +75,15 @@ export function ExpenseList({
           <TableBody>
             {expenses.map((expense) => (
               <TableRow key={expense.receipt_id}>
-                <TableCell>{format(new Date(expense.date), 'dd/MM/yyyy')}</TableCell>
+                <TableCell>{format(parseISO(expense.date), 'dd/MM/yyyy')}</TableCell>
                 <TableCell>{expense.vendor}</TableCell>
-                <TableCell className="text-right">R$ {parseFloat(expense.total).toFixed(2)}</TableCell>
+                <TableCell className="text-right">{formatCurrency(expense.total)}</TableCell> {/* <-- Usando formatCurrency */}
                 <TableCell>
                   {expense.items && expense.items.length > 0 ? (
                     <ul className="list-disc list-inside text-sm">
                       {expense.items.slice(0, 2).map((item, index) => (
                         <li key={index}>
-                          {item.name} (R$ {parseFloat(item.price).toFixed(2)} x {item.quantity})
+                          {item.name} ({formatCurrency(item.price)} x {item.quantity}) {/* <-- Usando formatCurrency */}
                         </li>
                       ))}
                       {expense.items.length > 2 && <li>...</li>}
@@ -95,10 +93,6 @@ export function ExpenseList({
                   )}
                 </TableCell>
                 <TableCell className="flex justify-center items-center gap-2">
-                  {/* Se EditExpenseDialog também precisa de updateExpense, passe-o */}
-                  {/* Assumindo que EditExpenseDialog chama useExpenses internamente. Se for esse o caso,
-                      você terá um problema similar de estado. A solução seria passar updateExpense como prop para ele também.
-                      Por agora, mantemos onSuccess, que já faz o refetch no pai. */}
                   <EditExpenseDialog expense={expense} onSuccess={refetchExpenses} /> 
                   <Button
                     variant="destructive"

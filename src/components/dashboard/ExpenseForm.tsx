@@ -1,11 +1,12 @@
 // src/components/dashboard/ExpenseForm.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react'; // Import useEffect
+import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { format, formatISO, parseISO } from 'date-fns'; // Import formatISO, parseISO
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
 
 import { Input } from '@/components/ui/input';
@@ -14,10 +15,17 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, PlusCircle, MinusCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, parseInputToFloatString, formatNumberForInput } from '@/lib/utils';
 import { toast } from 'sonner';
-import { ManualExpenseInput, Expense } from '@/lib/types'; // Import Expense
-import { useExpenses } from '@/hooks/useExpenses'; // Import useExpenses
+import { ManualExpenseInput, Expense } from '@/lib/types';
+import { useExpenses } from '@/hooks/useExpenses';
+
+// Função para formatar data de forma segura (sem timezone issues)
+const formatDateForAPI = (date: Date): string => {
+  // Use getTime() para garantir que estamos trabalhando com a data local
+  const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+  return localDate.toISOString().split('T')[0];
+};
 
 // Esquema de validação com Zod
 const formSchema = z.object({
@@ -27,14 +35,14 @@ const formSchema = z.object({
   vendor: z.string().min(2, {
     message: 'O nome do vendedor deve ter pelo menos 2 caracteres.',
   }),
-  total: z.string().regex(/^\d+(\.\d{1,2})?$/, {
-    message: 'O total deve ser um número válido (ex: 123.45).',
+  total: z.string().regex(/^\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?$/, {
+    message: 'O total deve ser um número válido (ex: 123,45 ou 1.234,56).',
   }),
   items: z.array(
     z.object({
       name: z.string().min(1, 'Nome do item é obrigatório.'),
-      price: z.string().regex(/^\d+(\.\d{1,2})?$/, {
-        message: 'Preço deve ser um número válido.',
+      price: z.string().regex(/^\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?$/, {
+        message: 'Preço deve ser um número válido (ex: 12,34).',
       }),
       quantity: z.string().regex(/^\d+$/, {
         message: 'Quantidade deve ser um número inteiro.',
@@ -45,47 +53,45 @@ const formSchema = z.object({
 
 interface ExpenseFormProps {
   onManualExpenseSuccess: () => void;
-  expenseToEdit?: Expense; // Nova prop para editar despesas
+  expenseToEdit?: Expense;
 }
 
 export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { updateExpense } = useExpenses(); // Obter updateExpense do hook
+  const { updateExpense } = useExpenses();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      date: expenseToEdit ? parseISO(expenseToEdit.date) : new Date(), // Preenche com data da despesa ou data atual
+      date: expenseToEdit ? parseISO(expenseToEdit.date) : new Date(),
       vendor: expenseToEdit?.vendor || '',
-      total: expenseToEdit?.total || '0.00',
+      total: expenseToEdit ? formatNumberForInput(expenseToEdit.total) : '0,00',
       items: expenseToEdit?.items?.map(item => ({
         name: item.name,
-        price: item.price,
+        price: formatNumberForInput(item.price),
         quantity: item.quantity,
-      })) || [{ name: '', price: '', quantity: '1' }],
+      })) || [{ name: '', price: '0,00', quantity: '1' }],
     },
   });
 
-  // Resetar o formulário quando expenseToEdit mudar (útil ao abrir modal de edição para despesas diferentes)
   useEffect(() => {
     if (expenseToEdit) {
       form.reset({
         date: parseISO(expenseToEdit.date),
         vendor: expenseToEdit.vendor,
-        total: expenseToEdit.total,
+        total: formatNumberForInput(expenseToEdit.total),
         items: expenseToEdit.items.map(item => ({
           name: item.name,
-          price: item.price,
+          price: formatNumberForInput(item.price),
           quantity: item.quantity,
         })),
       });
     } else {
-      // Resetar para valores padrão se não estiver editando
       form.reset({
         date: new Date(),
         vendor: '',
-        total: '0.00',
-        items: [{ name: '', price: '', quantity: '1' }],
+        total: '0,00',
+        items: [{ name: '', price: '0,00', quantity: '1' }],
       });
     }
   }, [expenseToEdit, form]);
@@ -112,23 +118,29 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
         return;
       }
 
+      // Debug: vamos ver o que está sendo enviado
+      const formattedDate = formatDateForAPI(values.date);
+      console.log('Data selecionada:', values.date);
+      console.log('Data formatada para API:', formattedDate);
+      console.log('Timezone offset:', values.date.getTimezoneOffset());
+
       const expenseData: ManualExpenseInput = {
-        ...values,
-        date: formatISO(values.date, { representation: 'date' }), // Alterado: Para evitar problemas de fuso horário
-        total: parseFloat(values.total).toFixed(2),
+        date: formattedDate,
+        vendor: values.vendor,
+        total: parseFloat(parseInputToFloatString(values.total)).toFixed(2),
         items: values.items.map(item => ({
-          ...item,
-          price: parseFloat(item.price).toFixed(2),
+          name: item.name,
+          price: parseFloat(parseInputToFloatString(item.price)).toFixed(2),
           quantity: parseInt(item.quantity).toString(),
         })),
       };
 
+      console.log('Dados enviados para API:', expenseData);
+
       if (expenseToEdit) {
-        // Lógica para EDITAR despesa existente
         await updateExpense(expenseToEdit.receipt_id, expenseData);
         toast.success('Despesa atualizada com sucesso.');
       } else {
-        // Lógica para ADICIONAR nova despesa
         const response = await fetch('/api/expenses', {
           method: 'POST',
           headers: {
@@ -180,7 +192,7 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
                   )}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {field.value ? format(field.value, 'PPP') : <span>Selecione uma data</span>}
+                  {field.value ? format(field.value, 'dd/MM/yyyy', { locale: ptBR }) : <span>Selecione uma data</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
@@ -188,7 +200,7 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
                   mode="single"
                   selected={field.value}
                   onSelect={field.onChange}
-                  initialFocus
+                  autoFocus
                 />
               </PopoverContent>
             </Popover>
@@ -211,7 +223,12 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
       {/* Total */}
       <div className="grid gap-2">
         <Label htmlFor="total">Total</Label>
-        <Input id="total" type="text" {...form.register('total')} placeholder="0.00" />
+        <Input 
+          id="total" 
+          type="text" 
+          {...form.register('total')} 
+          placeholder="0,00"
+        />
         {form.formState.errors.total && (
           <p className="text-sm text-red-500">{form.formState.errors.total.message}</p>
         )}
@@ -230,7 +247,12 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
           </div>
           <div className="grid gap-2">
             <Label htmlFor={`items.${index}.price`}>Preço</Label>
-            <Input id={`items.${index}.price`} type="text" {...form.register(`items.${index}.price`)} placeholder="0.00" />
+            <Input 
+              id={`items.${index}.price`} 
+              type="text" 
+              {...form.register(`items.${index}.price`)} 
+              placeholder="0,00"
+            />
             {form.formState.errors.items?.[index]?.price && (
               <p className="text-sm text-red-500">{form.formState.errors.items[index]?.price?.message}</p>
             )}
@@ -249,7 +271,7 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
           )}
         </div>
       ))}
-      <Button type="button" variant="outline" onClick={() => append({ name: '', price: '', quantity: '1' })}>
+      <Button type="button" variant="outline" onClick={() => append({ name: '', price: '0,00', quantity: '1' })}>
         <PlusCircle className="h-4 w-4 mr-2" /> Adicionar Item
       </Button>
       {form.formState.errors.items && typeof form.formState.errors.items.message === 'string' && (

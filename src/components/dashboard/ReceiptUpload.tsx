@@ -6,8 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { fetchAuthSession } from 'aws-amplify/auth';
-import { getCurrentUser } from 'aws-amplify/auth';
+import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
 
 interface ReceiptUploadProps {
   onUploadSuccess: () => void;
@@ -44,7 +43,6 @@ export function ReceiptUpload({ onUploadSuccess }: ReceiptUploadProps) {
     setLoading(true);
     
     try {
-      // Obter sessão usando Amplify v6
       const session = await fetchAuthSession();
       
       if (!session.tokens?.idToken) {
@@ -53,9 +51,8 @@ export function ReceiptUpload({ onUploadSuccess }: ReceiptUploadProps) {
 
       const token = session.tokens.idToken.toString();
 
-      // Obter dados do usuário atual usando Amplify v6
       const currentUser = await getCurrentUser();
-      const userId = currentUser.userId; // No v6, use userId em vez de attributes.sub
+      const userId = currentUser.userId;
 
       // 1. Obter URL pré-assinada do nosso API Route
       const response = await fetch('/api/s3-upload', {
@@ -93,19 +90,23 @@ export function ReceiptUpload({ onUploadSuccess }: ReceiptUploadProps) {
       }
 
       toast.success('Upload de recibo sucesso!', {
-        description: `O recibo "${file.name}" foi enviado e está sendo processado.`,
+        description: `O recibo "${file.name}" foi enviado e está sendo processado. Pode levar alguns segundos para aparecer na lista.`,
       });
 
-      // Limpar o estado
+      // Limpar o estado do arquivo
       setFile(null);
-      
       // Reset do input file
       const fileInput = document.getElementById('receipt') as HTMLInputElement;
       if (fileInput) {
         fileInput.value = '';
       }
 
-      onUploadSuccess();
+      // --- NOVO: Introduzir um atraso antes de chamar onUploadSuccess ---
+      // 3 segundos é um bom ponto de partida, ajuste se necessário.
+      setTimeout(() => {
+        onUploadSuccess(); // Chama o refetchExpenses do componente pai
+      }, 6000); // Espera 3 segundos
+
     } catch (error: any) {
       console.error('Erro ao fazer upload:', error);
       toast.error('Erro no upload', {

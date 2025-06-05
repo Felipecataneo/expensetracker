@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, parseISO } from 'date-fns';
+import { formatCurrency } from '@/lib/utils'; // <-- Importar a função de formatação
 
 interface MonthlyChartsProps {
   expenses: Expense[];
@@ -22,14 +23,13 @@ interface MonthlyChartsProps {
 
 export function MonthlyCharts({ expenses }: MonthlyChartsProps) {
   const data = useMemo(() => {
-    // Agrupar despesas por mês e somar os totais
     const monthlyDataMap = new Map<string, number>();
 
     expenses.forEach((expense) => {
       try {
         const date = parseISO(expense.date);
-        const monthYear = format(date, 'MMM yyyy'); // Ex: "Jan 2023"
-        const total = parseFloat(expense.total || '0'); // Garante que o total é um número
+        const monthYear = format(date, 'MMM yyyy');
+        const total = parseFloat(expense.total || '0');
 
         if (!isNaN(total)) {
           monthlyDataMap.set(monthYear, (monthlyDataMap.get(monthYear) || 0) + total);
@@ -39,15 +39,13 @@ export function MonthlyCharts({ expenses }: MonthlyChartsProps) {
       }
     });
 
-    // Converter para array de objetos e ordenar por data
     const sortedData = Array.from(monthlyDataMap.entries())
       .map(([monthYear, total]) => ({
         month: monthYear,
-        total: parseFloat(total.toFixed(2)), // Arredonda para 2 casas decimais
+        total: parseFloat(total.toFixed(2)),
       }))
       .sort((a, b) => {
-        // Ordenar cronologicamente
-        const dateA = parseISO(a.month.replace(' ', '-01-')); // Gambiarra para parsear Mês Ano
+        const dateA = parseISO(a.month.replace(' ', '-01-'));
         const dateB = parseISO(b.month.replace(' ', '-01-'));
         return dateA.getTime() - dateB.getTime();
       });
@@ -78,7 +76,7 @@ export function MonthlyCharts({ expenses }: MonthlyChartsProps) {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="month" />
             <YAxis />
-            <Tooltip formatter={(value: number) => `R$ ${value.toFixed(2)}`} />
+            <Tooltip formatter={(value: number) => formatCurrency(value)} /> {/* <-- Usando formatCurrency no Tooltip */}
             <Legend />
             <Bar dataKey="total" fill="#8884d8" name="Total Gasto" />
           </BarChart>
