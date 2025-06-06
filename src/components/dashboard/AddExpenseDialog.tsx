@@ -48,8 +48,7 @@ export function AddExpenseDialog({ onSuccess }: AddExpenseDialogProps) {
           </DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="upload" className="w-full">
-          {/* Altera para 3 colunas em telas maiores, e 1 em telas pequenas para responsividade */}
-          <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3">
+          <TabsList className="grid w-full h-auto grid-cols-1 gap-1 sm:h-9 sm:grid-cols-3 sm:gap-0">
             <TabsTrigger value="upload">Upload de Recibo</TabsTrigger>
             <TabsTrigger value="manual">Digitar Manualmente</TabsTrigger>
             <TabsTrigger value="csv">Upload CSV (C6)</TabsTrigger>
