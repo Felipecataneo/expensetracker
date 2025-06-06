@@ -35,24 +35,106 @@ const formSchema = z.object({
   vendor: z.string().min(2, {
     message: 'O nome do vendedor deve ter pelo menos 2 caracteres.',
   }),
-  // Para 'total' e 'price', aceitamos string vazia para entrada do usuário,
-  // mas converteremos para '0.00' se vazio ao submeter.
-  // A regex garante que é um formato numérico válido quando não está vazio.
-  total: z.string().regex(/^\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?$/, {
-    message: 'O total deve ser um número válido (ex: 123,45 ou 1.234,56).',
-  }).optional().or(z.literal('')), // Torna o campo opcional ou uma string vazia explícita
+  // Validação mais flexível - aceita diferentes formatos de número
+  total: z.string()
+    .optional()
+    .or(z.literal(''))
+    .refine((val) => {
+      if (!val || val === '') return true; // Campo opcional
+      // Remove pontos e substitui vírgula por ponto para validação
+      const cleanValue = val.replace(/\./g, '').replace(',', '.');
+      const num = parseFloat(cleanValue);
+      return !isNaN(num) && num >= 0;
+    }, {
+      message: 'Digite um valor válido (ex: 3000, 3.000, 3000,50)',
+    }),
   items: z.array(
     z.object({
       name: z.string().min(1, 'Nome do item é obrigatório.'),
-      price: z.string().regex(/^\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?$/, {
-        message: 'Preço deve ser um número válido (ex: 12,34).',
-      }).optional().or(z.literal('')), // Torna o campo opcional ou uma string vazia explícita
+      price: z.string()
+        .optional()
+        .or(z.literal(''))
+        .refine((val) => {
+          if (!val || val === '') return true; // Campo opcional
+          // Remove pontos e substitui vírgula por ponto para validação
+          const cleanValue = val.replace(/\./g, '').replace(',', '.');
+          const num = parseFloat(cleanValue);
+          return !isNaN(num) && num >= 0;
+        }, {
+          message: 'Digite um valor válido (ex: 25, 25,90)',
+        }),
       quantity: z.string().regex(/^\d+$/, {
         message: 'Quantidade deve ser um número inteiro.',
       }),
     })
   ).min(1, 'Adicione pelo menos um item.'),
 });
+
+// Função para formatar número de forma mais inteligente
+const formatCurrency = (value: string): string => {
+  if (!value || value === '') return '';
+  
+  // Remove tudo que não for dígito, vírgula ou ponto
+  let cleanValue = value.replace(/[^\d.,]/g, '');
+  
+  // Se só tem dígitos, formata automaticamente
+  if (/^\d+$/.test(cleanValue)) {
+    const num = parseInt(cleanValue);
+    if (num < 100) {
+      // Para números pequenos, não adiciona separador de milhares
+      return cleanValue;
+    } else {
+      // Para números grandes, adiciona separador de milhares
+      return num.toLocaleString('pt-BR');
+    }
+  }
+  
+  // Se tem vírgula, assume que é decimal
+  if (cleanValue.includes(',')) {
+    const parts = cleanValue.split(',');
+    if (parts.length === 2) {
+      const integerPart = parts[0].replace(/\./g, ''); // Remove pontos existentes
+      const decimalPart = parts[1].slice(0, 2); // Máximo 2 decimais
+      
+      if (integerPart.length > 3) {
+        const formattedInteger = parseInt(integerPart).toLocaleString('pt-BR');
+        return `${formattedInteger},${decimalPart}`;
+      } else {
+        return `${integerPart},${decimalPart}`;
+      }
+    }
+  }
+  
+  return cleanValue;
+};
+
+// Função para converter para float (para envio à API)
+const parseToFloat = (value: string): number => {
+  if (!value || value === '') return 0;
+  // Remove pontos (separadores de milhares) e substitui vírgula por ponto
+  const cleanValue = value.replace(/\./g, '').replace(',', '.');
+  return parseFloat(cleanValue) || 0;
+};
+
+// Componente de Input melhorado para valores monetários
+const CurrencyInput = ({ field, placeholder = "0,00", id }: any) => (
+  <Input
+    id={id}
+    type="text"
+    {...field}
+    placeholder={placeholder}
+    onChange={(e) => {
+      const formatted = formatCurrency(e.target.value);
+      field.onChange(formatted);
+    }}
+    onBlur={(e) => {
+      // Formatação final no blur
+      const formatted = formatCurrency(e.target.value);
+      field.onChange(formatted);
+    }}
+    value={field.value ?? ''}
+  />
+);
 
 interface ExpenseFormProps {
   onManualExpenseSuccess: () => void;
@@ -134,13 +216,11 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
       const expenseData: ManualExpenseInput = {
         date: formattedDate,
         vendor: values.vendor,
-        total: totalValue,
+        total: parseToFloat(values.total || '').toFixed(2),
         items: values.items.map(item => ({
           name: item.name,
-          // Trata preço do item vazio ou inválido como '0.00'
-          price: item.price ? parseFloat(parseInputToFloatString(item.price)).toFixed(2) : '0.00', 
-          // Garante que a quantidade seja pelo menos '1' se estiver vazia
-          quantity: parseInt(item.quantity || '1').toString(), 
+          price: parseToFloat(item.price || '').toFixed(2),
+          quantity: parseInt(item.quantity || '1').toString(),
         })),
       };
 
@@ -241,33 +321,7 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
           control={form.control}
           name="total"
           render={({ field }) => (
-            <Input
-              id="total"
-              type="text"
-              {...field}
-              placeholder="0,00" 
-              onFocus={(e) => {
-                if (e.target.value === '0,00' || e.target.value === '0.00') {
-                  field.onChange(''); 
-                }
-              }}
-              onBlur={(e) => {
-                const parsedValue = parseInputToFloatString(e.target.value);
-                const numValue = parseFloat(parsedValue);
-                // Se o valor for vazio ou inválido após o blur, define para "0,00"
-                if (isNaN(numValue) || e.target.value.trim() === '') {
-                  field.onChange('0,00'); 
-                } else {
-                  // Caso contrário, reformata o número para o padrão 123,45
-                  field.onChange(formatNumberForInput(numValue)); 
-                }
-              }}
-              onChange={(e) => {
-                // Permite ao usuário digitar livremente, a formatação acontece no blur
-                field.onChange(e.target.value);
-              }}
-              value={field.value ?? ''} // Garante que o valor seja controlado, tratando null/undefined como string vazia
-            />
+            <CurrencyInput field={field} placeholder="0,00" id="total" />
           )}
         />
         {form.formState.errors.total && (
@@ -294,31 +348,8 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
               <Controller
                 control={form.control}
                 name={`items.${index}.price`}
-                render={({ field: itemPriceField }) => (
-                  <Input 
-                    id={`items.${index}.price`} 
-                    type="text" 
-                    {...itemPriceField}
-                    placeholder="0,00"
-                    onFocus={(e) => {
-                      if (e.target.value === '0,00' || e.target.value === '0.00') {
-                        itemPriceField.onChange('');
-                      }
-                    }}
-                    onBlur={(e) => {
-                      const parsedValue = parseInputToFloatString(e.target.value);
-                      const numValue = parseFloat(parsedValue);
-                      if (isNaN(numValue) || e.target.value.trim() === '') {
-                        itemPriceField.onChange('0,00');
-                      } else {
-                        itemPriceField.onChange(formatNumberForInput(numValue));
-                      }
-                    }}
-                    onChange={(e) => {
-                      itemPriceField.onChange(e.target.value);
-                    }}
-                    value={itemPriceField.value ?? ''}
-                  />
+                render={({ field }) => (
+                  <CurrencyInput field={field} placeholder="0,00" id={`items.${index}.price`} />
                 )}
               />
               {form.formState.errors.items?.[index]?.price && (
