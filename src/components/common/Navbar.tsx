@@ -12,7 +12,7 @@ export function Navbar() {
   // Classes de estilo para a barra de navegação e seus elementos internos
   // `bg-sidebar` e `text-sidebar-foreground` são variáveis do seu tema
   // que se ajustam automaticamente para claro/escuro.
-  const navbarClasses = "bg-white text-sidebar-foreground p-4"; 
+  const navbarClasses = "bg-gradient-to-r from-indigo-700 to-sky-500 text-white p-4 shadow-lg"; 
   const titleClasses = "text-2xl font-bold";
   const userTextClasses = "text-md hidden sm:block"; // A cor do texto herdará da Navbar
 
