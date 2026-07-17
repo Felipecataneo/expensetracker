@@ -4,7 +4,7 @@
 import { Navbar } from '@/components/common/Navbar';
 import { ExpenseList } from '@/components/dashboard/ExpenseList';
 import { MonthlyCharts } from '@/components/dashboard/MonthlyCharts';
-import { VendorChart } from '@/components/dashboard/VendorChart';
+import { BreakdownChart } from '@/components/dashboard/BreakdownChart';
 import { SummaryCards } from '@/components/dashboard/SummaryCards';
 import { AddExpenseDialog } from '@/components/dashboard/AddExpenseDialog';
 import {
@@ -70,13 +70,13 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-muted/40 flex flex-col">
       <Navbar />
       <main className="flex-1 container mx-auto px-4 py-8 space-y-6">
         {/* Linha de filtros e ações: um único filtro escopa KPIs, gráficos e lista */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900">
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
               Dashboard de gastos
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
@@ -87,7 +87,7 @@ export default function Home() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-44 bg-white">
+              <SelectTrigger className="w-44 bg-background">
                 <SelectValue placeholder="Período" />
               </SelectTrigger>
               <SelectContent>
@@ -114,12 +114,13 @@ export default function Home() {
             />
           </div>
           <div className="lg:col-span-2">
-            <VendorChart expenses={scopedExpenses} selectedMonth={selectedMonth} />
+            <BreakdownChart expenses={scopedExpenses} selectedMonth={selectedMonth} />
           </div>
         </div>
 
         <ExpenseList
           expenses={scopedExpenses}
+          selectedMonth={selectedMonth}
           isLoading={isLoading}
           error={error}
           refetchExpenses={refetchExpenses}

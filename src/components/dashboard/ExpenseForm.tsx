@@ -14,6 +14,14 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { CATEGORIES, inferCategory } from '@/lib/categories';
 import { CalendarIcon, PlusCircle, MinusCircle } from 'lucide-react';
 import { cn, parseInputToFloatString, formatNumberForInput } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -35,6 +43,8 @@ const formSchema = z.object({
   vendor: z.string().min(2, {
     message: 'O nome do vendedor deve ter pelo menos 2 caracteres.',
   }),
+  // 'auto' = inferir pela descrição do vendedor no momento de salvar
+  category: z.string().optional(),
   // Validação mais flexível - aceita diferentes formatos de número
   total: z.string()
     .optional()
@@ -150,6 +160,7 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
     defaultValues: {
       date: expenseToEdit ? parseISO(expenseToEdit.date) : new Date(),
       vendor: expenseToEdit?.vendor || '',
+      category: expenseToEdit?.category || 'auto',
       // Se estiver editando e o total for 0, ou se não estiver editando, inicializa como vazio.
       // Caso contrário, formata o total para exibição no input.
       total: expenseToEdit && parseFloat(expenseToEdit.total) !== 0 ? formatNumberForInput(expenseToEdit.total) : '',
@@ -168,6 +179,7 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
       form.reset({
         date: parseISO(expenseToEdit.date),
         vendor: expenseToEdit.vendor,
+        category: expenseToEdit.category || 'auto',
         total: parseFloat(expenseToEdit.total) !== 0 ? formatNumberForInput(expenseToEdit.total) : '',
         items: expenseToEdit.items.map(item => ({
           name: item.name,
@@ -179,6 +191,7 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
       form.reset({
         date: new Date(),
         vendor: '',
+        category: 'auto',
         total: '', // Default para string vazia
         items: [{ name: '', price: '', quantity: '1' }], // Default para string vazia
       });
@@ -213,9 +226,16 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
       // Usa parseFloat para garantir que o valor seja um número, e toFixed(2) para 2 casas decimais.
       const totalValue = values.total ? parseFloat(parseInputToFloatString(values.total)).toFixed(2) : '0.00';
       
+      // Resolve a categoria: escolha manual ou inferência pela descrição do vendedor
+      const resolvedCategory =
+        values.category && values.category !== 'auto'
+          ? values.category
+          : inferCategory(values.vendor);
+
       const expenseData: ManualExpenseInput = {
         date: formattedDate,
         vendor: values.vendor,
+        category: resolvedCategory,
         total: parseToFloat(values.total || '').toFixed(2),
         items: values.items.map(item => ({
           name: item.name,
@@ -248,6 +268,7 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
       form.reset({
         date: new Date(),
         vendor: '',
+        category: 'auto',
         total: '',
         items: [{ name: '', price: '', quantity: '1' }],
       });
@@ -312,6 +333,30 @@ export function ExpenseForm({ onManualExpenseSuccess, expenseToEdit }: ExpenseFo
         {form.formState.errors.vendor && (
           <p className="text-sm text-red-500">{form.formState.errors.vendor.message}</p>
         )}
+      </div>
+
+      {/* Categoria */}
+      <div className="grid gap-2">
+        <Label htmlFor="category">Categoria</Label>
+        <Controller
+          control={form.control}
+          name="category"
+          render={({ field }) => (
+            <Select value={field.value || 'auto'} onValueChange={field.onChange}>
+              <SelectTrigger id="category" className="w-full sm:w-[280px]">
+                <SelectValue placeholder="Detectar automaticamente" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Detectar automaticamente</SelectItem>
+                {CATEGORIES.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
       </div>
 
       {/* Total */}

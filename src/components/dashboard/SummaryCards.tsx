@@ -11,7 +11,7 @@ import {
   formatMonthLabel,
   getMonthlyTotals,
 } from '@/lib/expense-utils';
-import { DELTA_DOWN_GOOD, DELTA_UP_BAD } from '@/lib/chart-theme';
+import { useChartTheme } from '@/hooks/useChartTheme';
 import { WalletIcon, ReceiptTextIcon, TrendingUpIcon, TrendingDownIcon, StoreIcon, CalendarDaysIcon } from 'lucide-react';
 
 interface SummaryCardsProps {
@@ -44,6 +44,7 @@ function StatTile({ label, value, helper, icon }: StatTileProps) {
 }
 
 export function SummaryCards({ expenses, selectedMonth }: SummaryCardsProps) {
+  const theme = useChartTheme();
   const stats = useMemo(() => {
     const scoped = filterByMonth(expenses, selectedMonth);
     const total = scoped.reduce((sum, expense) => sum + expenseTotal(expense), 0);
@@ -87,7 +88,7 @@ export function SummaryCards({ expenses, selectedMonth }: SummaryCardsProps) {
   const deltaHelper = stats.delta ? (
     <span
       className="inline-flex items-center gap-1 font-medium"
-      style={{ color: stats.delta.percent >= 0 ? DELTA_UP_BAD : DELTA_DOWN_GOOD }}
+      style={{ color: stats.delta.percent >= 0 ? theme.deltaUpBad : theme.deltaDownGood }}
     >
       {stats.delta.percent >= 0 ? (
         <TrendingUpIcon className="h-3.5 w-3.5" aria-hidden />

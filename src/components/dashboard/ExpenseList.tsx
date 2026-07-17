@@ -23,10 +23,13 @@ import {
   ArrowUpIcon,
   ArrowDownIcon,
   ArrowUpDownIcon,
+  DownloadIcon,
 } from 'lucide-react';
 import { EditExpenseDialog } from './EditExpenseDialog';
 import { formatCurrency } from '@/lib/utils';
 import { expenseTotal } from '@/lib/expense-utils';
+import { getEffectiveCategory } from '@/lib/categories';
+import { useThemeMode } from '@/hooks/useChartTheme';
 import { ManualExpenseInput } from '@/lib/types';
 
 const PAGE_SIZE = 10;
@@ -36,11 +39,44 @@ type SortDirection = 'asc' | 'desc';
 
 interface ExpenseListProps {
   expenses: Expense[]; // já filtradas pelo período selecionado
+  selectedMonth: string; // "YYYY-MM" ou "all" — usado no nome do arquivo exportado
   isLoading: boolean;
   error: string | null;
   refetchExpenses: () => void;
   deleteExpense: (receiptId: string, date: string) => Promise<void>;
   updateExpense: (receiptId: string, updatedExpense: ManualExpenseInput) => Promise<void>;
+}
+
+/** Gera e baixa um CSV (separador ";" e BOM UTF-8, padrão do Excel pt-BR). */
+function exportToCsv(expenses: Expense[], selectedMonth: string) {
+  const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  const header = ['Data', 'Vendedor', 'Categoria', 'Total (R$)', 'Itens'];
+
+  const rows = expenses.map((expense) => {
+    const items = (expense.items || [])
+      .map((item) => `${item.quantity}x ${item.name} (${formatCurrency(item.price)})`)
+      .join(' | ');
+    return [
+      format(parseISO(expense.date), 'dd/MM/yyyy'),
+      expense.vendor || '',
+      getEffectiveCategory(expense).label,
+      expenseTotal(expense).toFixed(2).replace('.', ','),
+      items,
+    ]
+      .map(quote)
+      .join(';');
+  });
+
+  const csv = '\uFEFF' + [header.map(quote).join(';'), ...rows].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = selectedMonth === 'all' ? 'despesas-todas.csv' : `despesas-${selectedMonth}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 function SortableHead({
@@ -83,11 +119,13 @@ function SortableHead({
 
 export function ExpenseList({
   expenses,
+  selectedMonth,
   isLoading,
   error,
   refetchExpenses,
   deleteExpense,
 }: ExpenseListProps) {
+  const themeMode = useThemeMode();
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -104,6 +142,7 @@ export function ExpenseList({
       ? expenses.filter(
           (expense) =>
             expense.vendor?.toLowerCase().includes(term) ||
+            getEffectiveCategory(expense).label.toLowerCase().includes(term) ||
             expense.items?.some((item) => item.name?.toLowerCase().includes(term))
         )
       : expenses;
@@ -165,18 +204,30 @@ export function ExpenseList({
               : `${filtered.length} de ${expenses.length} lançamentos`}
           </CardDescription>
         </div>
-        <div className="relative w-full sm:w-72">
-          <SearchIcon
-            className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            type="search"
-            placeholder="Buscar por vendedor ou item..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="pl-8"
-          />
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div className="relative w-full sm:w-64">
+            <SearchIcon
+              className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              type="search"
+              placeholder="Buscar vendedor, item, categoria..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="pl-8"
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9"
+            disabled={filtered.length === 0}
+            onClick={() => exportToCsv(filtered, selectedMonth)}
+          >
+            <DownloadIcon className="h-4 w-4" aria-hidden />
+            Exportar CSV
+          </Button>
         </div>
       </CardHeader>
       <CardContent>
@@ -212,7 +263,8 @@ export function ExpenseList({
                       direction={sortDirection}
                       onSort={handleSort}
                     />
-                    <TableHead className="hidden md:table-cell">Itens</TableHead>
+                    <TableHead className="hidden sm:table-cell">Categoria</TableHead>
+                    <TableHead className="hidden lg:table-cell">Itens</TableHead>
                     <SortableHead
                       label="Total"
                       sortKey="total"
@@ -233,7 +285,22 @@ export function ExpenseList({
                       <TableCell className="max-w-56 truncate font-medium">
                         {expense.vendor}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell max-w-md">
+                      <TableCell className="hidden sm:table-cell whitespace-nowrap">
+                        {(() => {
+                          const category = getEffectiveCategory(expense);
+                          return (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+                              <span
+                                className="h-2 w-2 rounded-full"
+                                style={{ backgroundColor: category.color[themeMode] }}
+                                aria-hidden
+                              />
+                              {category.label}
+                            </span>
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell max-w-md">
                         {expense.items && expense.items.length > 0 ? (
                           <span className="block truncate text-sm text-muted-foreground">
                             {expense.items

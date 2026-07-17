@@ -20,13 +20,7 @@ import {
   formatMonthLabel,
   getMonthlyTotals,
 } from '@/lib/expense-utils';
-import {
-  AXIS_COLOR,
-  CHART_ACCENT,
-  DEEMPHASIS_COLOR,
-  GRID_COLOR,
-  TICK_COLOR,
-} from '@/lib/chart-theme';
+import { useChartTheme } from '@/hooks/useChartTheme';
 
 interface MonthlyChartsProps {
   expenses: Expense[];
@@ -54,6 +48,7 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: Tooltip
 }
 
 export function MonthlyCharts({ expenses, selectedMonth, onSelectMonth }: MonthlyChartsProps) {
+  const theme = useChartTheme();
   const data = useMemo(() => getMonthlyTotals(expenses).slice(-MAX_MONTHS), [expenses]);
 
   if (data.length === 0) {
@@ -82,24 +77,24 @@ export function MonthlyCharts({ expenses, selectedMonth, onSelectMonth }: Monthl
       <CardContent>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke={GRID_COLOR} />
+            <CartesianGrid vertical={false} stroke={theme.grid} />
             <XAxis
               dataKey="month"
               tickFormatter={(month: string) => formatMonthLabel(month)}
-              tick={{ fill: TICK_COLOR, fontSize: 12 }}
+              tick={{ fill: theme.tick, fontSize: 12 }}
               tickLine={false}
-              axisLine={{ stroke: AXIS_COLOR }}
+              axisLine={{ stroke: theme.axis }}
               interval="preserveStartEnd"
               minTickGap={16}
             />
             <YAxis
               tickFormatter={formatCompactCurrency}
-              tick={{ fill: TICK_COLOR, fontSize: 12 }}
+              tick={{ fill: theme.tick, fontSize: 12 }}
               tickLine={false}
               axisLine={false}
               width={72}
             />
-            <Tooltip content={<ChartTooltip />} cursor={{ fill: GRID_COLOR, opacity: 0.4 }} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: theme.grid, opacity: 0.4 }} />
             <Bar
               dataKey="total"
               name="Total gasto"
@@ -116,8 +111,8 @@ export function MonthlyCharts({ expenses, selectedMonth, onSelectMonth }: Monthl
                   key={entry.month}
                   fill={
                     !hasSelection || entry.month === selectedMonth
-                      ? CHART_ACCENT
-                      : DEEMPHASIS_COLOR
+                      ? theme.accent
+                      : theme.deemphasis
                   }
                 />
               ))}

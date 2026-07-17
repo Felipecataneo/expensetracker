@@ -10,6 +10,7 @@ export interface Expense {
   vendor: string;
   total: string; // Armazenado como string para consistência com Textract
   items: ExpenseItem[];
+  category?: string; // Opcional: quando ausente, é inferida pelo vendedor (ver lib/categories)
   s3_path?: string; // Opcional, se veio de upload
   processed_timestamp: string;
 }
@@ -26,4 +27,5 @@ export interface ManualExpenseInput {
   vendor: string;
   total: string;
   items: ExpenseItem[];
+  category?: string;
 }
