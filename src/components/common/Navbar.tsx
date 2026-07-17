@@ -1,51 +1,42 @@
 // src/components/common/Navbar.tsx
-'use client'; // Certifique-se de que esta linha está presente
+'use client';
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/components/providers/AuthProvider'; // Importe o hook de autenticação
-import { LogOutIcon } from 'lucide-react'; // Ícone para o botão Sair
+import { useAuth } from '@/components/providers/AuthProvider';
+import { LogOutIcon, WalletIcon } from 'lucide-react';
 
 export function Navbar() {
   const { user, signOut, loading: authLoading } = useAuth();
 
-  // Classes de estilo para a barra de navegação e seus elementos internos
-  // `bg-sidebar` e `text-sidebar-foreground` são variáveis do seu tema
-  // que se ajustam automaticamente para claro/escuro.
-  const navbarClasses = "bg-gradient-to-r from-indigo-700 to-sky-500 text-white p-4 shadow-lg"; 
-  const titleClasses = "text-2xl font-bold";
-  const userTextClasses = "text-md hidden sm:block"; // A cor do texto herdará da Navbar
-
-  if (authLoading) {
-    return (
-      <nav className={navbarClasses}>
-        <div className="container mx-auto flex justify-between items-center">
-          <h1 className={titleClasses}>Despesas da casa</h1>
-          {/* Opcional: Indicador de carregamento na navbar. Usamos text-muted-foreground que também é tema-aware. */}
-          <span className="text-sm text-muted-foreground">Carregando usuário...</span>
-        </div>
-      </nav>
-    );
-  }
-
   return (
-    <nav className={navbarClasses}>
-      <div className="container mx-auto flex justify-between items-center">
-        <h1 className={titleClasses}>Despesas da casa</h1>
-        <div className="flex items-center gap-4">
-          {/* Mostra o nome do usuário se ele estiver autenticado */}
-          {user && (
-            <span className={userTextClasses}>
-              Bem-vindo, {user.username || user.signInDetails?.loginId || 'Usuário'}!
-            </span>
+    <nav className="sticky top-0 z-40 border-b bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/75">
+      <div className="container mx-auto flex h-14 items-center justify-between px-4">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <WalletIcon className="h-4.5 w-4.5" aria-hidden />
+          </span>
+          <h1 className="text-lg font-semibold tracking-tight text-gray-900">
+            Despesas da casa
+          </h1>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {authLoading ? (
+            <span className="text-sm text-muted-foreground">Carregando...</span>
+          ) : (
+            <>
+              {user && (
+                <span className="hidden sm:block text-sm text-muted-foreground">
+                  {user.username || user.signInDetails?.loginId || 'Usuário'}
+                </span>
+              )}
+              <Button onClick={signOut} variant="outline" size="sm">
+                <LogOutIcon className="h-4 w-4" aria-hidden />
+                Sair
+              </Button>
+            </>
           )}
-          <Button 
-            onClick={signOut} 
-            variant="ghost" // Alterado para variant="ghost" para melhor adaptação de tema
-          >
-            <LogOutIcon className="h-4 w-4" />
-            Sair
-          </Button>
         </div>
       </div>
     </nav>
