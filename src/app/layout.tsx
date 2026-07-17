@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { AuthProvider } from '@/components/providers/AuthProvider'; // <-- Importar
+import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { Toaster } from "@/components/ui/sonner"// Para os toasts do Shadcn
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
@@ -19,17 +20,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="pt-BR" suppressHydrationWarning>
       <body
         className={cn(
           'min-h-screen bg-background font-sans antialiased',
           inter.variable
         )}
       >
-        <AuthProvider> {/* <-- Envolver com AuthProvider */}
-          {children}
-        </AuthProvider>
-        <Toaster /> {/* O Toaster deve estar fora do AuthProvider se o AuthProvider puder ser redirecionado */}
+        <ThemeProvider>
+          <AuthProvider> {/* <-- Envolver com AuthProvider */}
+            {children}
+          </AuthProvider>
+          <Toaster /> {/* O Toaster deve estar fora do AuthProvider se o AuthProvider puder ser redirecionado */}
+        </ThemeProvider>
       </body>
     </html>
   );

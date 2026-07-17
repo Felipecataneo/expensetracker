@@ -247,7 +247,7 @@ def lambda_handler(event, context):
             # The 'userId' is also important for the GSI, make sure it's stored
             db_item = {
                 'receipt_id': receipt_id,
-                'userId': user_id, 
+                'userId': user_id,
                 'date': request_body_parsed['date'], # This is correct, as date is the Sort Key
                 'vendor': request_body_parsed['vendor'],
                 'total': request_body_parsed['total'],
@@ -255,6 +255,10 @@ def lambda_handler(event, context):
                 'processed_timestamp': datetime.now().isoformat(),
                 's3_path': 'MANUAL_ENTRY'
             }
+
+            # Campo opcional de categoria (o frontend infere pela descrição quando ausente)
+            if request_body_parsed.get('category'):
+                db_item['category'] = request_body_parsed['category']
             
             logger.info(f"Attempting to put item: {db_item}")
             table.put_item(Item=db_item)
@@ -388,7 +392,7 @@ def lambda_handler(event, context):
             expression_attribute_values = {}
             expression_attribute_names = {}
 
-            updatable_fields = ['vendor', 'total', 'items'] 
+            updatable_fields = ['vendor', 'total', 'items', 'category']
             for field in updatable_fields:
                 if field in request_body_parsed:
                     attr_name = f'#{field[0].upper()}{field[1:]}' 
